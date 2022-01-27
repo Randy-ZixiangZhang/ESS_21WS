@@ -40,9 +40,16 @@ void CALLBACK_HID_Device_ProcessHIDReport(
 
 void SystemCoreClockSetup(void);
 
+/*
+My Code here
+
+*/
 uint8_t password_GetNext(void);
-
-
+//Global Variable
+uint8_t G_PASSWORD[20];
+uint8_t G_numCharacter;
+bool G_isLastPassDone = 1;
+bool G_shouldSend = 1;
 
 
 /**
@@ -55,11 +62,34 @@ int main(void) {
 	XMC_GPIO_SetMode(LED2,XMC_GPIO_MODE_OUTPUT_PUSH_PULL);
 	USB_Init();
 
+	//My Code
+	/*
+	uint8_t* G_PASSWORD;
+	G_PASSWORD = calloc(20,sizeof(uint8_t));
+
+	*(G_PASSWORD) = GERMAN_KEYBOARD_SC_H;
+	*(G_PASSWORD+1) = GERMAN_KEYBOARD_SC_H;
+	*(G_PASSWORD+2) = GERMAN_KEYBOARD_SC_H;
+	*(G_PASSWORD+3) = GERMAN_KEYBOARD_SC_H;
+	*/
+
+
 	// Wait until host has enumerated HID device
 	for(int i = 0; i < 10e6; ++i)
 		; 
 
 	while (1) {
+
+		//Create new password
+		if(G_isLastPassDone){
+				G_PASSWORD[0] = GERMAN_KEYBOARD_SC_H;
+				G_PASSWORD[1] = GERMAN_KEYBOARD_SC_H;
+				G_PASSWORD[2] = GERMAN_KEYBOARD_SC_H;
+				G_PASSWORD[3] = GERMAN_KEYBOARD_SC_H;
+				G_numCharacter = 4;
+				G_isLastPassDone = false;
+		}
+
 		HID_Device_USBTask(&Keyboard_HID_Interface);
 	}
 }
@@ -74,30 +104,40 @@ bool CALLBACK_HID_Device_CreateHIDReport(
 	USB_KeyboardReport_Data_t* report = (USB_KeyboardReport_Data_t *)ReportData;
 	*ReportSize = sizeof(USB_KeyboardReport_Data_t);
 	
-	static uint8_t ifStringSent = 0;
-	if(!ifStringSent){
+	//Control Logic, Should we send?
+	
+	//Which password should I send?
 
-		uint8_t stringToSend[11] = {
-			GERMAN_KEYBOARD_SC_H, 
-			GERMAN_KEYBOARD_SC_E, 
-			GERMAN_KEYBOARD_SC_L, 
-			GERMAN_KEYBOARD_SC_L, 
-			GERMAN_KEYBOARD_SC_O, 
-			//GERMAN_KEYBOARD_SC_SPACE, 
-			GERMAN_KEYBOARD_SC_W, 
-			GERMAN_KEYBOARD_SC_O, 
-			GERMAN_KEYBOARD_SC_R, 
-			GERMAN_KEYBOARD_SC_L, 
-			GERMAN_KEYBOARD_SC_D, 
-			GERMAN_KEYBOARD_SC_ENTER
-		};
-		//uint8_t stringToSend = password_GetNext();
-		int pswdLength = sizeof(stringToSend)/sizeof(stringToSend[0]);
-		for(int i = 0;i<pswdLength;i++){
-			report->KeyCode[i] = stringToSend[i];
+	/*Control Logic give feedback to main loop
+	wait for callback to finish sending or keep going
+	*/
+	
+	
+	static uint8_t characterSent = 0, 
+				   indexToSend = 0;
+
+	if(G_shouldSend){
+		if(indexToSend < G_numCharacter) {
+			if(characterSent) {
+				report->Modifier = 0; 
+				report->Reserved = 0; 
+				report->KeyCode[0] = 0; 
+				characterSent = 0;
+				++indexToSend; //increment of index
+			} else {
+				report->Modifier = 0; 
+				report->Reserved = 0; 
+				report->KeyCode[0] = G_PASSWORD[indexToSend]; 
+				characterSent = 1;
+			}
+		}
+		else if (indexToSend == G_numCharacter){
+			//now characterSent = 0
+			indexToSend = 0;//reset of index
+			G_shouldSend = 0;//so callback stops sending
 		}
 	}
-	ifStringSent = 1;
+
 	return true;
 }
 
