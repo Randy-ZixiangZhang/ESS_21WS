@@ -40,6 +40,11 @@ void CALLBACK_HID_Device_ProcessHIDReport(
 
 void SystemCoreClockSetup(void);
 
+uint8_t password_GetNext(void);
+
+
+
+
 /**
  * Main program entry point. This routine configures the hardware required by
  * the application, then enters a loop to run the application tasks in sequence.
@@ -68,41 +73,38 @@ bool CALLBACK_HID_Device_CreateHIDReport(
 							uint16_t* const ReportSize ) {
 	USB_KeyboardReport_Data_t* report = (USB_KeyboardReport_Data_t *)ReportData;
 	*ReportSize = sizeof(USB_KeyboardReport_Data_t);
-	static uint8_t characterSent = 0, 
-				   indexToSend = 0;
+	
+	static uint8_t ifStringSent = 0;
+	if(!ifStringSent){
 
-	// string to be sent
-	static uint8_t stringToSend[12] = {
-		GERMAN_KEYBOARD_SC_H, 
-		GERMAN_KEYBOARD_SC_E, 
-		GERMAN_KEYBOARD_SC_L, 
-		GERMAN_KEYBOARD_SC_L, 
-		GERMAN_KEYBOARD_SC_O, 
-		//GERMAN_KEYBOARD_SC_SPACE, 
-		GERMAN_KEYBOARD_SC_W, 
-		GERMAN_KEYBOARD_SC_O, 
-		GERMAN_KEYBOARD_SC_R, 
-		GERMAN_KEYBOARD_SC_L, 
-		GERMAN_KEYBOARD_SC_D, 
-		GERMAN_KEYBOARD_SC_ENTER
-	};
-
-	if(indexToSend < 12) {
-		if(characterSent) {
-			report->Modifier = 0; 
-			report->Reserved = 0; 
-			report->KeyCode[0] = 0; 
-			characterSent = 0;
-			++indexToSend; 
-		} else {
-			report->Modifier = 0; 
-			report->Reserved = 0; 
-			report->KeyCode[0] = stringToSend[indexToSend]; 
-			characterSent = 1;
+		uint8_t stringToSend[11] = {
+			GERMAN_KEYBOARD_SC_H, 
+			GERMAN_KEYBOARD_SC_E, 
+			GERMAN_KEYBOARD_SC_L, 
+			GERMAN_KEYBOARD_SC_L, 
+			GERMAN_KEYBOARD_SC_O, 
+			//GERMAN_KEYBOARD_SC_SPACE, 
+			GERMAN_KEYBOARD_SC_W, 
+			GERMAN_KEYBOARD_SC_O, 
+			GERMAN_KEYBOARD_SC_R, 
+			GERMAN_KEYBOARD_SC_L, 
+			GERMAN_KEYBOARD_SC_D, 
+			GERMAN_KEYBOARD_SC_ENTER
+		};
+		//uint8_t stringToSend = password_GetNext();
+		int pswdLength = sizeof(stringToSend)/sizeof(stringToSend[0]);
+		for(int i = 0;i<pswdLength;i++){
+			report->KeyCode[i] = stringToSend[i];
 		}
 	}
-
+	ifStringSent = 1;
 	return true;
+}
+
+
+uint8_t password_GetNext(){
+
+//	return password;
 }
 
 // Called on report input. For keyboard HID devices, that's the state of the LEDs
