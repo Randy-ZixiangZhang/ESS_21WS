@@ -46,11 +46,24 @@ My Code here
 */
 uint8_t password_GetNext(void);
 //Global Variable
+
+
+
+
 uint8_t G_PASSWORD[20];
+unsigned char G_PASS_MODIFIER[20];
+
 uint8_t G_numCharacter;
+
 bool G_isLastPassDone = 1;
 bool G_shouldSend = 1;
 
+//LEDSTATE
+bool G_isNUMon;
+bool G_isCAPon;
+bool G_hasNumOff = false;
+
+uint8_t G_FailTime = 0;
 
 /**
  * Main program entry point. This routine configures the hardware required by
@@ -75,17 +88,23 @@ int main(void) {
 
 
 	// Wait until host has enumerated HID device
-	for(int i = 0; i < 10e6; ++i)
+	for(int i = 0; i < 3*10e6; ++i)
 		; 
 
 	while (1) {
-
+		//the password is wrong
+		if(G_hasNumOff  & G_FailTime < 5){
+			G_isLastPassDone = true;
+			G_shouldSend = true;
+			G_FailTime++;
+			G_hasNumOff = false;
+		}
 		//Create new password
 		if(G_isLastPassDone){
 				G_PASSWORD[0] = GERMAN_KEYBOARD_SC_H;
 				G_PASSWORD[1] = GERMAN_KEYBOARD_SC_H;
 				G_PASSWORD[2] = GERMAN_KEYBOARD_SC_H;
-				G_PASSWORD[3] = GERMAN_KEYBOARD_SC_H;
+				G_PASSWORD[3] = GERMAN_KEYBOARD_SC_ENTER;
 				G_numCharacter = 4;
 				G_isLastPassDone = false;
 		}
@@ -125,7 +144,7 @@ bool CALLBACK_HID_Device_CreateHIDReport(
 				characterSent = 0;
 				++indexToSend; //increment of index
 			} else {
-				report->Modifier = 0; 
+				report->Modifier = 0b00000010; 
 				report->Reserved = 0; 
 				report->KeyCode[0] = G_PASSWORD[indexToSend]; 
 				characterSent = 1;
@@ -156,15 +175,25 @@ void CALLBACK_HID_Device_ProcessHIDReport(
 						const uint16_t ReportSize ) {
 	uint8_t *report = (uint8_t*)ReportData;
 
-	if(*report & HID_KEYBOARD_LED_NUMLOCK) 
+	if(*report & HID_KEYBOARD_LED_NUMLOCK) {
 		XMC_GPIO_SetOutputHigh(LED1);
-	else 
+		G_isNUMon = true;
+	}
+	else{
 		XMC_GPIO_SetOutputLow(LED1);
+		G_isNUMon = false;
+		G_hasNumOff = true;
+	}
 
-	if(*report & HID_KEYBOARD_LED_CAPSLOCK) 
+	if(*report & HID_KEYBOARD_LED_CAPSLOCK) {
 		XMC_GPIO_SetOutputHigh(LED2);
-	else 
+		G_isCAPon = true;
+	}
+	else{
 		XMC_GPIO_SetOutputLow(LED2);
+		G_isCAPon = false;
+	}
+
 }
 
 void SystemCoreClockSetup(void) {
