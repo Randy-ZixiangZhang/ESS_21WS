@@ -128,80 +128,82 @@ bool CALLBACK_HID_Device_CreateHIDReport(
 	/*Control Logic give feedback to main loop
 	wait for callback to finish sending or keep going
 	*/
-	
-	//Determine which state
-
-
-
-
-
-	//this if only enters if LED off signal is received
-	if(G_hasNumOff  & (G_FailTime < numTotalSubStage)){
-		G_isLastPassDone = true;
-		G_shouldSend = true;
-		G_FailTime++;
-		G_hasNumOff = false;
-		SysTickNew = SysTickCounter;
-		G_time_1substage[G_indSubStage-1] = SysTickNew - SysTickOld;
-
-		//Summarize the substage
-		// if (G_FailTime == (numTotalSubStage - 1)){
-		// 	G_IndrightCharac = max_index(G_time_1substage,numTotalSubStage);
-		// }
-
-	}
-
-	//Create new password
-	if(G_isLastPassDone){
-
-		//first stage, two characters
-		if(G_indStage == 0){
-			G_numCharacter = 2;
-		}
-		else if(G_indStage > 0){
-			G_numCharacter = G_indStage;
-		}
-		
-		if(G_indSubStage < numTotalSubStage){
-			for(int i=0;i<G_numCharacter;i++){
-				G_Password_Arr[i] = G_CHARAC_ARR[G_indSubStage];
-				}
-			G_Password_Arr[G_numCharacter] = G_ENTER;
-			G_indSubStage++;
-		}
-
-		SysTickOld = SysTickCounter;
-		G_isLastPassDone = false;
-	}
-
-
 	static uint8_t characterSent = 0, 
-				   indexToSend = 0;
+			indexToSend = 0;
 
-	if(G_shouldSend){
-		if(indexToSend < (G_numCharacter+1)) {
-			if(characterSent) {
-				report->Modifier = 0; 
-				report->Reserved = 0; 
-				report->KeyCode[0] = 0; 
-				characterSent = 0;
-				++indexToSend; //increment of index
-			} else {
-				report->Modifier = G_Password_Arr[indexToSend].mod; 
-				report->Reserved = 0; 
-				report->KeyCode[0] = G_Password_Arr[indexToSend].key; 
-				characterSent = 1;
 
-				for(int i = 0; i < 10e5; ++i)
-		        ; 
+	//Determine which state
+	switch(G_CALLBACK_STATE){
+		case Create:
+			//first stage, two characters
+			if(G_indStage == 0){
+				G_numCharacter = 2;
 			}
-		}
-		else if (indexToSend == (G_numCharacter+1)){
-			//now characterSent = 0
-			indexToSend = 0;//reset of index
-			G_shouldSend = 0;//so callback stops sending
-		}
+			else if(G_indStage > 0){
+				G_numCharacter = G_indStage;
+			}
+			
+			if(G_indSubStage < numTotalSubStage){
+				for(int i=0;i<G_numCharacter;i++){
+					G_Password_Arr[i] = G_CHARAC_ARR[G_indSubStage];
+					}
+				G_Password_Arr[G_numCharacter] = G_ENTER;
+				G_indSubStage++;
+			}
+			SysTickOld = SysTickCounter;
+
+			G_CALLBACK_STATE = Sending;
+		break;
+
+		case Sending:
+
+
+			if(indexToSend < (G_numCharacter+1)) {
+				if(characterSent) {
+					report->Modifier = 0; 
+					report->Reserved = 0; 
+					report->KeyCode[0] = 0; 
+					characterSent = 0;
+					++indexToSend; //increment of index
+				} else {
+					report->Modifier = G_Password_Arr[indexToSend].mod; 
+					report->Reserved = 0; 
+					report->KeyCode[0] = G_Password_Arr[indexToSend].key; 
+					characterSent = 1;
+
+					//wait a little bit for the console to print
+					for(int i = 0; i < 10e5; ++i)
+					; 
+				}
+			}
+			else if (indexToSend == (G_numCharacter+1)){
+				//now characterSent = 0
+				indexToSend = 0;//reset of index
+				G_CALLBACK_STATE = Idle;//so callback stops sending
+			}
+			
+		break;
+
+		case Idle:
+			//this if only enters if LED off signal is received
+			if(G_hasNumOff  & (G_FailTime < numTotalSubStage)){
+				G_FailTime++;
+				G_hasNumOff = false;
+				SysTickNew = SysTickCounter;
+				G_time_1substage[G_indSubStage-1] = SysTickNew - SysTickOld;
+
+				//Summarize the substage
+				// if (G_FailTime == (numTotalSubStage - 1)){
+				// 	G_IndrightCharac = max_index(G_time_1substage,numTotalSubStage);
+				// }
+				G_CALLBACK_STATE = Create;
+			}		
+			break;
 	}
+
+
+
+
 
 	return true;
 }
