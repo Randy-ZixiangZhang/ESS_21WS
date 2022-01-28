@@ -1,6 +1,7 @@
 
 #include "KeyboardHID.h"
 #include "german_keyboardCodes.h"
+#include "character_define.h"
 
 /* Macros: */
 #define LED1 P1_1
@@ -47,8 +48,7 @@ My Code here
 uint8_t password_GetNext(void);
 //Global Variable
 
-
-
+Character G_Password_Arr[84];//10~20 length of pass, last one enter
 
 uint8_t G_PASSWORD[20];
 unsigned char G_PASS_MODIFIER[20];
@@ -75,39 +75,12 @@ int main(void) {
 	XMC_GPIO_SetMode(LED2,XMC_GPIO_MODE_OUTPUT_PUSH_PULL);
 	USB_Init();
 
-	//My Code
-	/*
-	uint8_t* G_PASSWORD;
-	G_PASSWORD = calloc(20,sizeof(uint8_t));
-
-	*(G_PASSWORD) = GERMAN_KEYBOARD_SC_H;
-	*(G_PASSWORD+1) = GERMAN_KEYBOARD_SC_H;
-	*(G_PASSWORD+2) = GERMAN_KEYBOARD_SC_H;
-	*(G_PASSWORD+3) = GERMAN_KEYBOARD_SC_H;
-	*/
-
-
 	// Wait until host has enumerated HID device
-	for(int i = 0; i < 3*10e6; ++i)
+	for(int i = 0; i < 10e6; ++i)
 		; 
 
 	while (1) {
-		//the password is wrong
-		if(G_hasNumOff  & G_FailTime < 5){
-			G_isLastPassDone = true;
-			G_shouldSend = true;
-			G_FailTime++;
-			G_hasNumOff = false;
-		}
-		//Create new password
-		if(G_isLastPassDone){
-				G_PASSWORD[0] = GERMAN_KEYBOARD_SC_H;
-				G_PASSWORD[1] = GERMAN_KEYBOARD_SC_H;
-				G_PASSWORD[2] = GERMAN_KEYBOARD_SC_H;
-				G_PASSWORD[3] = GERMAN_KEYBOARD_SC_ENTER;
-				G_numCharacter = 4;
-				G_isLastPassDone = false;
-		}
+
 
 		HID_Device_USBTask(&Keyboard_HID_Interface);
 	}
@@ -130,8 +103,24 @@ bool CALLBACK_HID_Device_CreateHIDReport(
 	/*Control Logic give feedback to main loop
 	wait for callback to finish sending or keep going
 	*/
-	
-	
+		//the password is wrong
+	if(G_hasNumOff  & (G_FailTime < 5)){
+		G_isLastPassDone = true;
+		G_shouldSend = true;
+		G_FailTime++;
+		G_hasNumOff = false;
+	}
+	//Create new password
+	if(G_isLastPassDone){
+			G_numCharacter = 84;
+			for(int i=0;i<G_numCharacter;i++){
+				G_Password_Arr[i] = G_CHARAC_ARR[i];
+			}
+
+			G_isLastPassDone = false;
+	}
+
+
 	static uint8_t characterSent = 0, 
 				   indexToSend = 0;
 
@@ -144,9 +133,9 @@ bool CALLBACK_HID_Device_CreateHIDReport(
 				characterSent = 0;
 				++indexToSend; //increment of index
 			} else {
-				report->Modifier = 0b00000010; 
+				report->Modifier = G_Password_Arr[indexToSend].mod; 
 				report->Reserved = 0; 
-				report->KeyCode[0] = G_PASSWORD[indexToSend]; 
+				report->KeyCode[0] = G_Password_Arr[indexToSend].key; 
 				characterSent = 1;
 			}
 		}
