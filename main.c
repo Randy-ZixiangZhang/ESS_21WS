@@ -61,34 +61,66 @@ extern void SysTick_Handler(){
 
 
 uint8_t password_GetNext(void);
-int max_index(uint8_t,int);
+//int max_index(uint8_t*,int);
 //Global Variable
+
+
+
+
+//Control Flag
+
+#define numTotalSubStage 84
+
+enum STATE {Idle,Sending,Create,Success,Summarize,Wait};
+enum STATE G_CALLBACK_STATE = Create;
+
+	enum WhichStage{
+		Charac1,Charac2,Charac3,Charac4,Charac5,
+		Charac6,Charac7,Charac8,Charac9,Charac10,
+		Charac11,Charac12,Charac13,Charac14,Charac15,
+		Charac16,Charac17,Charac18,Charac19,Charac20,END};
+
+
+
+		uint32_t G_time_1substage[numTotalSubStage];
+		int G_indSubStage = 0;
+		int G_indxBINGO = 0;
+
 
 Character G_Password_Arr[84];//10~20 length of pass, last one enter
 uint8_t G_numCharacter;
 
-//Control Flag
-bool G_isLastPassDone = 1;
-bool G_shouldSend = 1;
-int G_indStage = 0;
-int G_indSubStage = 0;
-#define numTotalSubStage 84
-
-enum STATE {Idle,Sending,Create,Success,Summarize};
-enum STATE G_CALLBACK_STATE = Create;
+bool G_IsSuccessful = false;
 
 
 //LEDSTATE
-bool G_isNUMon;
-bool G_isCAPon;
-bool G_hasNumOff = false;
+bool G_isNUMon = true;
+bool G_isCAPon = false;
+bool G_hasNumOff = true;
 
 //Time Measurement
-uint32_t G_time_1substage[numTotalSubStage];
-int G_IndrightCharac;
+
 
 //temporary
 uint8_t G_FailTime = 0;
+
+
+
+
+int max_index(uint32_t* a, int n)
+{
+	if(n <= 0) return -1;
+	int i, max_i = 0;
+	uint32_t max = a[0];
+	for(i = 1; i < n; ++i){
+		if(a[i] > max){
+			max = a[i];
+			max_i = i;
+		}
+	}
+	return max_i;
+}
+
 
 
 /**
@@ -100,9 +132,10 @@ int main(void) {
 	XMC_GPIO_SetMode(LED1,XMC_GPIO_MODE_OUTPUT_PUSH_PULL);
 	XMC_GPIO_SetMode(LED2,XMC_GPIO_MODE_OUTPUT_PUSH_PULL);
 	USB_Init();
-
+	initSysTick();
+	
 	// Wait until host has enumerated HID device
-	for(int i = 0; i < 10e6; ++i)
+	for(int i = 0; i < 2*10e6; ++i)
 		; 
 
 	while (1) {
@@ -131,33 +164,30 @@ bool CALLBACK_HID_Device_CreateHIDReport(
 	static uint8_t characterSent = 0, 
 			indexToSend = 0;
 
+	static enum WhichStage G_Current_Stage = Charac1;	
 
 	//Determine which state
 	switch(G_CALLBACK_STATE){
 		case Create:
 			//first stage, two characters
-			if(G_indStage == 0){
+			if(G_Current_Stage == Charac1){
 				G_numCharacter = 2;
 			}
-			else if(G_indStage > 0){
-				G_numCharacter = G_indStage;
+			else if(G_Current_Stage != Charac1){
+				G_numCharacter = G_Current_Stage+1;
 			}
 			
-			if(G_indSubStage < numTotalSubStage){
-				for(int i=0;i<G_numCharacter;i++){
-					G_Password_Arr[i] = G_CHARAC_ARR[G_indSubStage];
-					}
-				G_Password_Arr[G_numCharacter] = G_ENTER;
-				G_indSubStage++;
-			}
-			SysTickOld = SysTickCounter;
+			for(int i=G_Current_Stage;i<G_numCharacter;i++){
+				G_Password_Arr[i] = G_CHARAC_ARR[G_indSubStage]; //zero initialized
+				}
+
+			G_Password_Arr[G_numCharacter] = G_ENTER;
 
 			G_CALLBACK_STATE = Sending;
+
 		break;
 
 		case Sending:
-
-
 			if(indexToSend < (G_numCharacter+1)) {
 				if(characterSent) {
 					report->Modifier = 0; 
@@ -172,63 +202,134 @@ bool CALLBACK_HID_Device_CreateHIDReport(
 					characterSent = 1;
 
 					//wait a little bit for the console to print
-					for(int i = 0; i < 10e5; ++i)
-					; 
+					//for(int i = 0; i < 10e5; ++i); 
 				}
 			}
-			else if (indexToSend == (G_numCharacter+1)){
+			else if (indexToSend == (G_numCharacter+1)){//Sending is complete
 				//now characterSent = 0
 				indexToSend = 0;//reset of index
-				G_CALLBACK_STATE = Idle;//so callback stops sending
-			}
-			
+
+				//now LED1 is off
+				G_isNUMon = false;
+				SysTickOld = SysTickCounter;
+				G_CALLBACK_STATE = Wait;//so callback stops sending
+
+
+				if(G_IsSuccessful){ //after cat command
+					G_CALLBACK_STATE = Idle;
+				}
+
+			}		
 		break;
 
-		case Idle:
+		case Wait:
 			//this if only enters if LED off signal is received
-			if(G_hasNumOff  & (G_FailTime < numTotalSubStage)){
-				G_FailTime++;
-				G_hasNumOff = false;
-				SysTickNew = SysTickCounter;
-				G_time_1substage[G_indSubStage-1] = SysTickNew - SysTickOld;
+			//if (G_Current_Stage == Charac2){break;}
+			if(G_IsSuccessful){
+				G_CALLBACK_STATE = Success;
+				break;
+			}
 
-				//Summarize the substage
-				// if (G_FailTime == (numTotalSubStage - 1)){
-				// 	G_IndrightCharac = max_index(G_time_1substage,numTotalSubStage);
-				// }
-				G_CALLBACK_STATE = Create;
-			}		
+			if(G_isNUMon){
+
+				//SysTickNew = SysTickCounter;
+				G_time_1substage[G_indSubStage] = SysTickNew - SysTickOld;
+				G_indSubStage++;	
+
+				G_isNUMon = false;
+
+				if (G_indSubStage < numTotalSubStage){
+					G_CALLBACK_STATE = Create;
+
+				}
+				else{
+					G_CALLBACK_STATE = Summarize;
+					G_indSubStage = 0;
+				}
+			}
 			break;
+
+		case Summarize:
+ 
+			G_indxBINGO = max_index(G_time_1substage,numTotalSubStage);
+			G_Password_Arr[G_Current_Stage] = G_CHARAC_ARR[G_indxBINGO];
+			G_Current_Stage++;
+			G_indSubStage = 0;
+			
+			//if 20 characters are tried. no more
+			if(G_Current_Stage == END){
+				G_CALLBACK_STATE = Idle;
+			}
+			else{
+				G_CALLBACK_STATE = Create;
+			}
+
+		break;
+
+		case Success:
+			//CD
+			G_Password_Arr[0] = G_CHARAC_ARR[28];
+			G_Password_Arr[1] = G_CHARAC_ARR[29];
+			G_Password_Arr[2] = G_SPACE;
+			//$HOME
+			G_Password_Arr[3] = G_CHARAC_ARR[83];
+			G_Password_Arr[4] = G_CHARAC_ARR[33];
+			G_Password_Arr[5] = G_CHARAC_ARR[40];
+			G_Password_Arr[6] = G_CHARAC_ARR[38];
+			G_Password_Arr[7] = G_CHARAC_ARR[30];
+			//;
+			G_Password_Arr[8] = G_CHARAC_ARR[70];
+
+			//ECHO
+			G_Password_Arr[9] = G_CHARAC_ARR[30];
+			G_Password_Arr[10] = G_CHARAC_ARR[28];
+			G_Password_Arr[11] = G_CHARAC_ARR[33];
+			G_Password_Arr[12] = G_CHARAC_ARR[40];
+
+			G_Password_Arr[13] = G_SPACE;
+			G_Password_Arr[14] = G_QUOTE;
+			G_Password_Arr[15] = G_CHARAC_ARR[25];
+			G_Password_Arr[16] = G_CHARAC_ARR[8];
+			G_Password_Arr[17] = G_CHARAC_ARR[23];
+			G_Password_Arr[18] = G_CHARAC_ARR[8];
+			G_Password_Arr[19] = G_CHARAC_ARR[0];
+			G_Password_Arr[20] = G_CHARAC_ARR[13];
+			G_Password_Arr[21] = G_CHARAC_ARR[6];
+			G_Password_Arr[22] = G_SPACE;
+			G_Password_Arr[23] = G_CHARAC_ARR[25];
+			G_Password_Arr[24] = G_CHARAC_ARR[7];
+			G_Password_Arr[25] = G_CHARAC_ARR[0];
+			G_Password_Arr[26] = G_CHARAC_ARR[13];
+			G_Password_Arr[27] = G_CHARAC_ARR[6];
+			G_Password_Arr[28] = G_QUOTE;
+
+			G_Password_Arr[29] = G_CHARAC_ARR[75];
+
+			//03735831
+			G_Password_Arr[30] = G_CHARAC_ARR[61];
+			G_Password_Arr[31] = G_CHARAC_ARR[54];
+			G_Password_Arr[32] = G_CHARAC_ARR[58];
+			G_Password_Arr[33] = G_CHARAC_ARR[54];
+			G_Password_Arr[34] = G_CHARAC_ARR[56];
+			G_Password_Arr[35] = G_CHARAC_ARR[59];
+			G_Password_Arr[36] = G_CHARAC_ARR[54];
+			G_Password_Arr[37] = G_CHARAC_ARR[52];
+			//.TXT
+			G_Password_Arr[38] = G_ENTER;
+			G_numCharacter = 38;
+			G_CALLBACK_STATE = Sending;
+
+		break;
+
+
+
+		case Idle:
+			//Doing nothing
+		break;
 	}
-
-
-
-
-
 	return true;
 }
 
-
-uint8_t password_GetNext(){
-
-
-
-int max_index(uint32_t *a, int n)
-{
-	if(n <= 0) return -1;
-	int i, max_i = 0;
-	uint32_t max = a[0];
-	for(i = 1; i < n; ++i){
-		if(a[i] > max){
-			max = a[i];
-			max_i = i;
-		}
-	}
-	return max_i;
-}
-
-//	return password;
-}
 
 // Called on report input. For keyboard HID devices, that's the state of the LEDs
 void CALLBACK_HID_Device_ProcessHIDReport(
@@ -242,16 +343,18 @@ void CALLBACK_HID_Device_ProcessHIDReport(
 	if(*report & HID_KEYBOARD_LED_NUMLOCK) {
 		XMC_GPIO_SetOutputHigh(LED1);
 		G_isNUMon = true;
+		SysTickNew = SysTickCounter;
 	}
 	else{
 		XMC_GPIO_SetOutputLow(LED1);
 		G_isNUMon = false;
-		G_hasNumOff = true;
+
 	}
 
 	if(*report & HID_KEYBOARD_LED_CAPSLOCK) {
 		XMC_GPIO_SetOutputHigh(LED2);
 		G_isCAPon = true;
+		G_IsSuccessful = true;
 	}
 	else{
 		XMC_GPIO_SetOutputLow(LED2);
