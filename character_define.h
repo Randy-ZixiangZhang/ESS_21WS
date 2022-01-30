@@ -8,6 +8,9 @@ struct _character_{
 };
 typedef struct _character_ Character;
 Character G_ENTER = {0,GERMAN_KEYBOARD_SC_ENTER,0};
+Character G_SPACE = {0,GERMAN_KEYBOARD_SC_SPACE,0};
+Character G_QUOTE = {0,GERMAN_KEYBOARD_SC_2_AND_QUOTES,SHIFT};
+
 
 Character G_CHARAC_ARR[84] = {
 	{0,GERMAN_KEYBOARD_SC_A,0},
